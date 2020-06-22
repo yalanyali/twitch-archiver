@@ -17,11 +17,12 @@ import youtube_dl
 
 import youtube_uploader as YT
 
-# https://id.twitch.tv/oauth2/token?client_id=c710oiul44s9fvc88n2h0bhaijl9ao&client_secret=nelycobymdeifqur86ok09otpe1aqx&grant_type=client_credentials
 class TwitchArchiver:
     def __init__(self):
         self.client_id = os.environ[
             'TWITCH_CLIENT_ID']  # throws error when not found
+        self.client_secret = os.environ[
+            'TWITCH_CLIENT_SECRET']  # throws error when not found
         self.ffmpeg_path = 'ffmpeg'
         self.youtubedl_path = 'youtube-dl'
         self.refresh = 5 * 60  # seconds
@@ -29,11 +30,12 @@ class TwitchArchiver:
         self.username = ""
         self.keyword = ""
         self.delete_media_on_error = False
+        self.access_token = ""
 
     def run(self):
         self.recorded_path = os.path.join(self.root_path, self.username)
         self.log("Checking.")
-        self.loopcheck()
+        self.check_loop()
 
     def check_user(self):
         url = 'https://api.twitch.tv/helix/streams?user_login=' + self.username
@@ -42,48 +44,52 @@ class TwitchArchiver:
         try:
             r = requests.get(url,
                              headers={
-                             "Client-ID": self.client_id,
-                             "Authorization": "Bearer if3euz3ilourooefvjzszuyxtcszj0"
+                                 "Client-ID": self.client_id,
+                                 "Authorization": "Bearer " + self.access_token
                              },
                              timeout=15)
+
+            # Auth check
+            if ("status" in r.json() and r.json()["status"] == 401):
+                self.refresh_token()
+                status = "TOKEN"
+                return status, info
+
             info = r.json()['data']  # [0]
             if len(info) == 0:
-                status = 1  # Error
+                status = "OFFLINE"  # Error
             elif info[0]['type'] == 'live':
                 if self.keyword:
                     if self.keyword.lower() not in info[0]['title'].lower():
-                        status = 3  # live but bad
+                        status = "LIVE_BUT_FILTERED"  # live but bad
                     else:
-                        status = 0  # live and good
+                        status = "LIVE" # live and good
                 else:
-                    status = 0  # live
+                    status = "LIVE"
         except requests.exceptions.RequestException as e:
             if e.response:
                 if e.response.reason == 'Not Found' or e.response.reason == 'Bad Entity':
-                    status = 2
+                    status = "NOT_FOUND"
         return status, info
 
-    def loopcheck(self):
+    def check_loop(self):
         while True:
             status, info = self.check_user()
-            if status == 2:
-                # self.log("Not found. Invalid username or typo.")
+            if status == "NOT_FOUND":
+                self.log("Not found. Invalid username or typo.")
                 time.sleep(self.refresh)
-            elif status == 1:
-                self.log(self.username +
-                         " currently offline, checking again in " +
-                         str(self.refresh) + " seconds.")
+            elif status == "OFFLINE":
+                self.log(f"{self.username} currently offline, checking again in {str(self.refresh)} seconds.")
                 time.sleep(self.refresh)
-            elif status == 3:
-                self.log(self.username + " online but streams: " +
-                         info[0]['title'])
+            elif status == "TOKEN":
+                self.log("TOKEN REFRESHED")
+                time.sleep(2)
+            elif status == "LIVE_BUT_FILTERED":
+                self.log(f"{self.username} online but streams: {info[0]['title']}")
                 time.sleep(self.refresh)
-            elif status == 0:
-                self.log(self.username +
-                         " online. Stream recording in session.")
-                filename = self.username + " - " + datetime.datetime.now(
-                ).strftime("%d.%m.%Y %H:%M") + " - " + (info[0]['title']
-                                                        or 'Stream') + ".mp4"
+            elif status == "LIVE":
+                self.log(f"{self.username} online. Stream recording in session.")
+                filename = f"""{self.username} - {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")} - {(info[0]['title'] or 'Stream')}.mp4"""
 
                 # clean filename
                 filename = "".join(
@@ -92,7 +98,7 @@ class TwitchArchiver:
 
                 recorded_filename = os.path.join(self.recorded_path, filename)
 
-                # start youtube-dl process (blocking)
+                # start youtube-dl process (blocking process)
                 try:
                     self.log('YOUTUBEDL DOWNLOADS')
                     ydl_opts = {
@@ -101,14 +107,13 @@ class TwitchArchiver:
                         'quiet': True
                     }
                     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-                        ydl.download(["https://twitch.tv/" + self.username])
+                        ydl.download([f"https://twitch.tv/{self.username}"])
 
                     self.log(
                         "Recording is done. Going back to checking while uploading."
                     )
                 except Exception as e:
-                    self.log("DEBUG " + str(e))
-                    self.log("Dertler.")
+                    self.log(f"DEBUG {str(e)}")
                 finally:
                     time.sleep(self.refresh)
 
@@ -122,7 +127,7 @@ class TwitchArchiver:
             thread.start()
 
     def upload(self, filepath, title):
-        self.log("UPLOADING FILE: " + filepath)
+        self.log(f"UPLOADING FILE: {filepath}")
         args = YT.DEFAULT_ARGS
         args.file = filepath
         args.title = title
@@ -138,6 +143,16 @@ class TwitchArchiver:
             os.remove(filepath)
             self.log('DELETED WITHOUT UPLOADING')
 
+    def refresh_token(self):
+        url = f"https://id.twitch.tv/oauth2/token?client_id={self.client_id}&client_secret={self.client_secret}&grant_type=client_credentials"
+        info = None
+        try:
+            r = requests.post(url, timeout=15)
+            print(r.json())
+            self.access_token = r.json()["access_token"]
+        except Exception as e:
+            self.log(f"TOKEN REFRESH ERROR{e}")
+
     def log(self, text):
         print(self.username + ': ' + text)
 
@@ -150,30 +165,14 @@ def main(argv):
     thread_list = []
     for username in username_list:
         twitch_archiver = TwitchArchiver()
-        twitch_archiver.username, _, twitch_archiver.keyword = username.partition(
-            ':')
+        twitch_archiver.username, _, twitch_archiver.keyword = username.partition(':')
         if (os.getenv('DELETE_MEDIA_ON_ERROR', '').lower() == 'true'):
             twitch_archiver.delete_media_on_error = True
         thread = threading.Thread(target=twitch_archiver.run)
         thread.start()
         # thread.join()
         thread_list.append(thread)
-    # usage_message = 'twitch_archiver.py -u <username,username2...>'
-    # try:
-    #     opts, _ = getopt.getopt(argv, "hu:q:", ["username=username,username2..."])
-    # except getopt.GetoptError:
-    #     print(usage_message)
-    #     sys.exit(2)
-    # for opt, arg in opts:
-    #     if opt == '-h':
-    #         print(usage_message)
-    #         sys.exit()
-    #     elif opt in ("-u", "--username"):
-    #         twitch_archiver.username = arg
-
-    # twitch_archiver.run()
 
 
 if __name__ == "__main__":
     main(sys.argv[1:])
-
