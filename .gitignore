@@ -1,0 +1,5 @@
+data/**
+venv
+client_secret.json
+credential_storage.json
+docker-compose.yml
