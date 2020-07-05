@@ -25,7 +25,7 @@ class TwitchArchiver:
             'TWITCH_CLIENT_SECRET']  # throws error when not found
         self.ffmpeg_path = 'ffmpeg'
         self.youtubedl_path = 'youtube-dl'
-        self.refresh = 5 * 60  # seconds
+        self.refresh = 3 * 60  # seconds
         self.root_path = "twitch-archive"
         self.username = ""
         self.keyword = ""
