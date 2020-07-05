@@ -1,5 +1,7 @@
 data/**
 venv
+__pycache__
+.vscode
 client_secret.json
 credential_storage.json
 docker-compose.yml

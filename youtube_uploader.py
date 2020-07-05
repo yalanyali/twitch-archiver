@@ -29,6 +29,7 @@ RETRIABLE_EXCEPTIONS = (httplib2.HttpLib2Error, IOError, httplib.NotConnected,
 RETRIABLE_STATUS_CODES = [500, 502, 503, 504]
 
 CLIENT_SECRETS_FILE = "client_secret.json"
+CLIENT_STORAGE_FILE = "credential_storage.json"
 
 YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
 YOUTUBE_PLAYLIST_SCOPE = "https://www.googleapis.com/auth/youtube.force-ssl"
@@ -55,7 +56,7 @@ def get_authenticated_service(args):
         CLIENT_SECRETS_FILE,
         scope=[YOUTUBE_UPLOAD_SCOPE, YOUTUBE_PLAYLIST_SCOPE],
         message=MISSING_CLIENT_SECRETS_MESSAGE)
-    storage = Storage("credential_storage.json")
+    storage = Storage(CLIENT_STORAGE_FILE)
     credentials = storage.get()
 
     if credentials is None or credentials.invalid:

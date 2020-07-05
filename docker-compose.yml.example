@@ -12,7 +12,8 @@ services:
     volumes:
       - ./data:/twitch-archive
     environment:
-      - TWITCH_CLIENT_ID=
+      - 'TWITCH_CLIENT_ID='
+      - 'TWITCH_CLIENT_SECRET='
       - 'TWITCH_USER=user1,user2'
 networks:
   proxy:
