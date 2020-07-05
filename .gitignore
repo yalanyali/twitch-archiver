@@ -1,6 +1,7 @@
 data/**
 venv
-__pycache__
+__pycache__/
+*.py[cod]
 .vscode
 client_secret.json
 credential_storage.json
