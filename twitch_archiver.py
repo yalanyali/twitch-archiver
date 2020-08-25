@@ -130,7 +130,7 @@ class TwitchArchiver:
         self.log(f"UPLOADING FILE: {filepath}")
         args = YT.DEFAULT_ARGS
         args.file = filepath
-        args.title = title
+        args.title = (title[:97] + '...') if len(title) > 100 else title # Titles can have max 100 characters
         args.description = title
         service = YT.get_authenticated_service(args)
         try:
